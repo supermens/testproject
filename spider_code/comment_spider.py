@@ -12,63 +12,52 @@ headers = {
             'USER-AGENT':header
         }
 sleep_time = random.randint(4,6)
+
+
 class DoubanSpider():
-    # url = "https://movie.douban.com/subject/30331149/comments?status=P"
-    # base_url = "https://movie.douban.com/subject/30331149/comments?"
-    """
-       https://movie.douban.com/subject/30331149/comments?start=20&limit=20&sort=new_score&status=P
-       https://movie.douban.com/subject/30331149/comments?start=40&limit=20&sort=new_score&status=P
-    """
-
-
     def __init__(self):
         pass
 
     def get_url(self):
         # 获取选电影中的电影地址
-        start_url = "https://movie.douban.com/j/new_search_subjects?sort=U&range=0,10&tags=&start=0"
+        start_url = "https://movie.douban.com/j/new_search_subjects?sort=U&range=0,10&tags=&start=20"
         response = requests.get(start_url)
         hjson = json.loads(response.content)
         for info in hjson["data"]:
             url = info["url"]
             movie_name = info["title"]
             print("正在保存%s电影评论..."%movie_name)
-            saved_movie = ["大黄蜂", "狗十三", "毒液：致命守护者", "无名之辈", "白蛇：缘起",
-                           "我不是药神", "“大”人物", "无双","头号玩家","泰坦尼克号","密室逃生",
-                           "碟中谍6：全面瓦解","这个杀手不太冷","大江大河"]
+            saved_movie = []
+            with open("finish.txt","r",encoding="utf-8") as f:
+                infos = f.readlines()
+                for info in infos:
+                    saved_movie.append(info.strip())
+            # print(saved_movie)
             if movie_name in saved_movie:
                 print("%s已经获取完毕" % movie_name)
             else:
                 self.start_spider(movie_name,url)
                 time.sleep(sleep_time)
-            # yield (url,self.start_spider())
-
-        # print(type(html))
 
     def start_spider(self,movie_name,url):
         # 获取每一页评论的网页信息
-        for page in range(0,11):
-            # url = f"https://movie.douban.com/subject/26752088/comments?start={20*page}"
+        for page in range(0,1):
             comment_url = f"{url}comments?start={20*page}"
             print(comment_url)  # 评论页面的url
             time.sleep(sleep_time)
             html = self.get_html(comment_url)  # 获取评论页面信息
             print("正在保存%s电影信息的第%d页评论数据" % (movie_name,int(page + 1)))
-            # saved_movie = ["大黄蜂","狗十三","毒液：致命守护者","无名之辈","白蛇：缘起","我不是药神","“大”人物","无双"]
-            # if movie_name in saved_movie:
-            #     print("%s已经获取完毕"%movie_name)
-            #     return None
             self.parse_html(movie_name,html)
-            print("休息5秒，防止被反爬")
+            print("休息一会，防止被反爬")
             time.sleep(sleep_time)
 
     def get_html(self,url):
-        # 获取指定的url界面，返回的etree解析后的页面
+        # 获取指定的url界面，返回的etree解析后的html页面
         proxy = {
-            "http":"119.101.115.88:9999",
+            # "http":"110.52.235.63:9999",
             # "https":"115.151.7.29:9999",
         }
-        response = requests.get(url=url, headers=headers,proxies=proxy)
+        response = requests.get(url=url, headers=headers)
         if response.status_code == 200:
             charset = response.headers.get("Content-Type").split(";")[-1].split("=")[-1]
             response.encoding = charset
@@ -83,11 +72,11 @@ class DoubanSpider():
 
         for comment in comments:
             items = {}
-            star = comment.xpath('.//span[contains(@class,"rating")]/@title')  # 评分
+            star = comment.xpath('.//span[contains(@class,"rating")]/@title')  # 评分可能为空
             user_url = comment.xpath('.//span[@class="comment-info"]/a/@href')[0].strip()  # 用户url
-            user_address = self.user_info(user_url)
-            if star and user_address:
-                # 有的用户没有给出评分，有的用户地址违法获取
+            user_address = self.user_info(user_url)  # 用户的地址可能获取不到
+            short = comment.xpath('.//span[@class="short"]/text()')  # 用户可能没有发表评论
+            if star and user_address and short:
                 items["name"] = movie_name
                 items["movie_show"] = movie_show
                 items["movie_time"] = movie_time
@@ -103,12 +92,13 @@ class DoubanSpider():
                 items["short"] = comment.xpath('.//span[@class="short"]/text()')[0].strip()
                 print(items)
                 time.sleep(sleep_time)
-
                 self.save_info_to_csv(movie_name,items)
+
             else:
                 continue
-
-
+        # 当信息存储完毕后，将电影名保存到finish.txt文件中
+        with open("finish.txt", "a", encoding="utf-8") as f:
+            f.write(movie_name + "\n")
 
     def user_info(self,user_url):
         # 获取评论用户的地址
